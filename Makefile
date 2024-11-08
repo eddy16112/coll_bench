@@ -18,7 +18,7 @@ MPI_SRCS := $(MPI_DIR)/allreduce.cc
 UTIL_SRCS := $(UTIL_DIR)/util.cc
 
 # Object files
-MPI_OBJS := $(MPI_SRCS:.cc=.o)
+MPI_UTIL_OBJ := $(MPI_DIR)/util.o
 UTIL_OBJ := $(UTIL_DIR)/util.o
 
 # Binaries
@@ -32,7 +32,7 @@ $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
 # Compile allreduce binary
-$(BIN_DIR)/mpi_allreduce: $(MPI_DIR)/allreduce.o $(UTIL_OBJ)
+$(BIN_DIR)/mpi_allreduce: $(MPI_DIR)/allreduce.o $(UTIL_OBJ) $(MPI_UTIL_OBJ)
 	$(CXX) $^ -o $@ $(LDFLAGS)
 
 # Compile object files

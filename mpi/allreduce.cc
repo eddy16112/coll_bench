@@ -1,44 +1,6 @@
-#include "util/util.h"
-#include <mpi.h>
-#include <stdio.h>
+#include "mpi/util.h"
 #include <stdlib.h>
-#include <assert.h>
 #include <unistd.h>
-
-#define MPI_CHECK(stmt)                                                  \
-  do {                                                                   \
-    int mpi_errno = (stmt);                                              \
-    if (MPI_SUCCESS != mpi_errno) {                                      \
-      fprintf(stderr, "[%s:%d] MPI call failed with %d \n", __FILE__,    \
-              __LINE__, mpi_errno);                                      \
-      exit(EXIT_FAILURE);                                                \
-    }                                                                    \
-    assert(MPI_SUCCESS == mpi_errno);                                    \
-  } while (0)
-
-MPI_Datatype get_mpi_datatype(enum DataType datatype)
-{
-  switch (datatype) {
-    case DataType::FLOAT:
-      return MPI_FLOAT;
-    case DataType::DOUBLE:
-      return MPI_DOUBLE;
-    case DataType::INT:
-      return MPI_INT;
-    default:
-      return NULL;
-  }
-}
-
-MPI_Op get_mpi_op(enum Redop op)
-{
-  switch (op) {
-    case Redop::SUM:
-      return MPI_SUM;
-    default:
-      return NULL;
-  }
-}
 
 void run_allreduce(const Config &config)
 {
