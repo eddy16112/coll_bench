@@ -57,6 +57,8 @@ int main(int argc, char **argv)
 
   int tid = omp_get_thread_num();
 
+#if 1
+
     // creating communicator handle with MPI communicator
     int size = mpi_size * num_threads;
     int rank = num_threads * mpi_rank + tid;
@@ -71,21 +73,25 @@ int main(int argc, char **argv)
 
     ucc_context_h ctx;
     ucc_team_h team;
-    create_ucc_cxt(global_comm, lib, ctx);
     std::vector<int> top_rank_mapping;
+    {
+    create_ucc_cxt(global_comm, lib, ctx);
     top_rank_mapping.resize(size);
     std::iota(top_rank_mapping.begin(), top_rank_mapping.end(), 0);
-    create_ucc_team(rank, size, top_rank_mapping, ctx, team);
+    create_ucc_team(global_comm, top_rank_mapping, ctx, team);
+    }
 
     global_comm.ctx = ctx;
     global_comm.team = team;
 
-    // create_ucc_comm(global_comm, tid, num_threads,)
+#else
+    create_ucc_comm(global_comm, tid, num_threads, lib);
+#endif
 
-    int32_t *sendbuf = nullptr;
-    int32_t *recvbuf = nullptr;
-    size_t send_size = 128;
-    size_t bufsize = send_size * sizeof(int32_t);
+  int32_t *sendbuf = nullptr;
+  int32_t *recvbuf = nullptr;
+  size_t send_size = 128;
+  size_t bufsize = send_size * sizeof(int32_t);
 
   if (allocate_memory_coll((void **)&sendbuf, bufsize, MemType::CPU)) {
     fprintf(stderr, "Could Not Allocate sendbuf [rank %d]\n", global_comm.global_rank);
@@ -97,14 +103,14 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  setup_buffer(DataType::INT, sendbuf, send_size, rank);
+  setup_buffer(DataType::INT, sendbuf, send_size, global_comm.global_rank);
 
   allreduce(sendbuf, recvbuf, send_size, UCC_DT_INT32, UCC_OP_SUM, global_comm);
 
   int expected = (0 + global_comm.global_comm_size - 1) * global_comm.global_comm_size / 2;
     for (size_t i = 0; i < send_size; i++) {
         if (recvbuf[i] != expected) {
-            printf("error rank %d, tid %d, val %d\n", rank, tid, recvbuf[i]);
+            printf("error rank %d, tid %d, val %d\n", global_comm.global_rank, tid, recvbuf[i]);
             assert(0);
         }
     } 
@@ -113,7 +119,7 @@ int main(int argc, char **argv)
   free_memory_coll(recvbuf, MemType::CPU);
 
 
-    printf("done with bcast rank %d\n", rank);
+    printf("done with bcast rank %d\n", global_comm.global_rank);
     destroy_ucc_comm(global_comm);
     ucc_finalize(lib);
 }

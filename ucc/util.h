@@ -29,7 +29,7 @@ void create_ucc_lib(ucc_lib_h &lib);
 
 void create_ucc_cxt(UCCComm &comm, ucc_lib_h lib, ucc_context_h &ctx);
 
-void create_ucc_team(int rank, int nranks, std::vector<int> &rank_mapping, ucc_context_h ctx, ucc_team_h &team);
+void create_ucc_team(UCCComm &comm, std::vector<int> &rank_mapping, ucc_context_h ctx, ucc_team_h &team);
 
 int create_ucc_comm(UCCComm &comm, int tid, int num_threads, const ucc_lib_h lib);
 

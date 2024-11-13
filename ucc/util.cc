@@ -139,18 +139,29 @@ void create_ucc_cxt(UCCComm &comm, ucc_lib_h lib, ucc_context_h &ctx)
   ucc_context_config_release(ctx_config);
 }
 
-void create_ucc_team(int rank, int nranks, std::vector<int> &rank_mapping, ucc_context_h ctx, ucc_team_h &team)
+void create_ucc_team(UCCComm &comm, std::vector<int> &rank_mapping, ucc_context_h ctx, ucc_team_h &team)
 {
     ucc_team_params_t team_params = { 0 };
+#if 0
     team_params.mask =
         UCC_TEAM_PARAM_FIELD_EP_MAP | UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_ID;
     team_params.ep_map.type = UCC_EP_MAP_ARRAY;
-    team_params.ep_map.ep_num = nranks;
+    team_params.ep_map.ep_num = comm.global_comm_size;;
     team_params.ep_map.array.map = rank_mapping.data();
     team_params.ep_map.array.elem_size = sizeof(rank_mapping[0]);
-    team_params.ep_range = UCC_COLLECTIVE_EP_RANGE_CONTIG;
-    team_params.ep = rank;
+    team_params.ep = comm.global_rank;
     team_params.id = 0;
+#else
+    team_params.mask          = UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_OOB;
+    team_params.oob.allgather = allgather_thread;
+    team_params.oob.req_test  = request_test;
+    team_params.oob.req_free  = request_free;
+    team_params.oob.coll_info = (void*)(&comm);
+    team_params.oob.n_oob_eps = comm.global_comm_size;
+    team_params.oob.oob_ep    = comm.global_rank;
+    team_params.ep            = comm.global_rank;
+#endif
+    team_params.ep_range      = UCC_COLLECTIVE_EP_RANGE_CONTIG;
     UCC_CHECK(ucc_team_create_post(&ctx, 1, &team_params, &team));
     while (ucc_team_create_test(team) == UCC_INPROGRESS);
 }
@@ -180,7 +191,7 @@ int create_ucc_comm(UCCComm &comm, int tid, int num_threads, const ucc_lib_h lib
   std::vector<int> top_rank_mapping;
   top_rank_mapping.resize(size);
   std::iota(top_rank_mapping.begin(), top_rank_mapping.end(), 0);
-  create_ucc_team(rank, size, top_rank_mapping, ctx, team);
+  create_ucc_team(comm, top_rank_mapping, ctx, team);
 
   comm.ctx = ctx;
   comm.team = team;
