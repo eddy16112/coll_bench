@@ -2,9 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void run_allreduce(const Config &config)
+void run_allreduce(const AllreduceConfig &config, MPI_Comm comm)
 {
-  MPI_Comm comm = *((MPI_Comm*)(config.comm));
   int rank, comm_size;
   MPI_CHECK(MPI_Comm_rank(comm, &rank));
   MPI_CHECK(MPI_Comm_size(comm, &comm_size));
@@ -59,7 +58,8 @@ void run_allreduce(const Config &config)
     printf("allreduce size %lu, avg %f, min %f, max %f\n", bufsize, avg_time, min_time, max_time);
   }
 
-
+  free_memory_coll(sendbuf, MemType::CPU);
+  free_memory_coll(recvbuf, MemType::CPU);
 }
 
 int main(int argc, char **argv)
@@ -71,9 +71,9 @@ int main(int argc, char **argv)
   printf("pid %d\n", getpid());
   //sleep(10);
 
-  Config config{1000, 10, 262144, false, DataType::INT, MemType::CPU, Redop::SUM, &comm};
-  run_allreduce(config);
+  AllreduceConfig config{1000, 10, 262144, false, DataType::INT, MemType::CPU, Redop::SUM};
+  run_allreduce(config, comm);
 
   MPI_CHECK(MPI_Finalize());
-
+  return 0;
 }

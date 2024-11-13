@@ -30,6 +30,26 @@ int allocate_memory_coll(void **buffer, size_t size, enum MemType type)
   }
 }
 
+void free_memory_coll(void *buffer, enum MemType type)
+{
+  switch (type) {
+    case MemType::CPU:
+      free(buffer);
+      return;
+#ifdef _ENABLE_CUDA_
+    case MemType::CUDA:
+      CUDA_CHECK(cudaFree(buffer));
+      return;
+    case MANAGED:
+      CUDA_CHECK(cudaFree(buffer));
+      return;
+  #endif
+    default:
+      assert(0);
+      return;
+  }
+}
+
 void setup_buffer(enum DataType datatype, void *buf, int count, int rank)
 {
   float *fbuf = nullptr;
