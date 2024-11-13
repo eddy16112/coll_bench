@@ -57,7 +57,7 @@ int main(int argc, char **argv)
 
   int tid = omp_get_thread_num();
 
-#if 1
+#if 0
 
     // creating communicator handle with MPI communicator
     int size = mpi_size * num_threads;

@@ -139,16 +139,16 @@ void create_ucc_cxt(UCCComm &comm, ucc_lib_h lib, ucc_context_h &ctx)
   ucc_context_config_release(ctx_config);
 }
 
-void create_ucc_team(UCCComm &comm, std::vector<int> &rank_mapping, ucc_context_h ctx, ucc_team_h &team)
+void create_ucc_team(UCCComm &comm, ucc_context_h ctx, ucc_team_h &team)
 {
     ucc_team_params_t team_params = { 0 };
-#if 0
+#ifdef _USE_UCC_EP_MAP
     team_params.mask =
         UCC_TEAM_PARAM_FIELD_EP_MAP | UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_ID;
     team_params.ep_map.type = UCC_EP_MAP_ARRAY;
     team_params.ep_map.ep_num = comm.global_comm_size;;
-    team_params.ep_map.array.map = rank_mapping.data();
-    team_params.ep_map.array.elem_size = sizeof(rank_mapping[0]);
+    team_params.ep_map.array.map = comm.top_rank_mapping.data();
+    team_params.ep_map.array.elem_size = sizeof(comm.top_rank_mapping[0]);
     team_params.ep = comm.global_rank;
     team_params.id = 0;
 #else
@@ -188,10 +188,11 @@ int create_ucc_comm(UCCComm &comm, int tid, int num_threads, const ucc_lib_h lib
   ucc_context_h ctx;
   ucc_team_h team;
   create_ucc_cxt(comm, lib, ctx);
-  std::vector<int> top_rank_mapping;
-  top_rank_mapping.resize(size);
-  std::iota(top_rank_mapping.begin(), top_rank_mapping.end(), 0);
-  create_ucc_team(comm, top_rank_mapping, ctx, team);
+#ifdef _USE_UCC_EP_MAP
+  comm.top_rank_mapping.resize(size);
+  std::iota(comm.top_rank_mapping.begin(), comm.top_rank_mapping.end(), 0);
+#endif
+  create_ucc_team(comm, ctx, team);
 
   comm.ctx = ctx;
   comm.team = team;

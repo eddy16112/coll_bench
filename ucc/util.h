@@ -5,6 +5,8 @@
 #include <vector>
 #include <iostream>
 
+//#define _USE_UCC_EP_MAP
+
 #define STR(x) #x
 #define UCC_CHECK(_call)                                            \
   if (UCC_OK != (_call)) {                                          \
@@ -23,6 +25,9 @@ struct UCCComm {
   int starting_tag = 0;
   ucc_context_h ctx;
   ucc_team_h team;
+#ifdef _USE_UCC_EP_MAP
+  std::vector<int> top_rank_mapping;
+#endif
 };
 
 void create_ucc_lib(ucc_lib_h &lib);
