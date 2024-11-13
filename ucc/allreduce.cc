@@ -4,7 +4,7 @@
 #include <omp.h>
 #include <numeric>
 
-static void bcast(void *sendbuf, void *recvbuf, size_t count, ucc_datatype_t type, ucc_reduction_op_t op, UCCComm &comm)
+static void allreduce(void *sendbuf, void *recvbuf, size_t count, ucc_datatype_t type, ucc_reduction_op_t op, UCCComm &comm)
 {
     ucc_coll_req_h req;
 
@@ -50,13 +50,17 @@ int main(int argc, char **argv)
 
 #pragma omp parallel num_threads(num_threads)
 {
-    int tid = omp_get_thread_num();
+  ucc_lib_h lib;
+  create_ucc_lib(lib);
+
+  UCCComm global_comm;
+
+  int tid = omp_get_thread_num();
 
     // creating communicator handle with MPI communicator
     int size = mpi_size * num_threads;
     int rank = num_threads * mpi_rank + tid;
 
-    UCCComm global_comm;
     global_comm.mpi_comm_size = mpi_size;
     global_comm.mpi_rank = mpi_rank;
     global_comm.nb_threads = num_threads;
@@ -67,9 +71,6 @@ int main(int argc, char **argv)
 
     ucc_context_h ctx;
     ucc_team_h team;
-    ucc_lib_h lib;
-
-    create_ucc_lib(lib);
     create_ucc_cxt(global_comm, lib, ctx);
     std::vector<int> top_rank_mapping;
     top_rank_mapping.resize(size);
@@ -84,16 +85,23 @@ int main(int argc, char **argv)
     int32_t *sendbuf = nullptr;
     int32_t *recvbuf = nullptr;
     size_t send_size = 128;
-    sendbuf = (int32_t *)malloc(sizeof(int32_t) * send_size);
-    recvbuf = (int32_t *)malloc(sizeof(int32_t) * send_size);
-    for (size_t i = 0; i < send_size; i++) {
-        sendbuf[i] = rank;
-        recvbuf[i] = 0;
-    }
+    size_t bufsize = send_size * sizeof(int32_t);
 
-    bcast(sendbuf, recvbuf, send_size, UCC_DT_INT32, UCC_OP_SUM, global_comm);
+  if (allocate_memory_coll((void **)&sendbuf, bufsize, MemType::CPU)) {
+    fprintf(stderr, "Could Not Allocate sendbuf [rank %d]\n", global_comm.global_rank);
+    exit(1);
+  }
+  
+  if (allocate_memory_coll((void **)&recvbuf, bufsize, MemType::CPU)) {
+    fprintf(stderr, "Could Not Allocate recvbuf [rank %d]\n", global_comm.global_rank);
+    exit(1);
+  }
 
-    int expected = (0 + size - 1) * size / 2;
+  setup_buffer(DataType::INT, sendbuf, send_size, rank);
+
+  allreduce(sendbuf, recvbuf, send_size, UCC_DT_INT32, UCC_OP_SUM, global_comm);
+
+  int expected = (0 + global_comm.global_comm_size - 1) * global_comm.global_comm_size / 2;
     for (size_t i = 0; i < send_size; i++) {
         if (recvbuf[i] != expected) {
             printf("error rank %d, tid %d, val %d\n", rank, tid, recvbuf[i]);
@@ -101,8 +109,10 @@ int main(int argc, char **argv)
         }
     } 
 
-    free(sendbuf);
-    free(recvbuf);
+  free_memory_coll(sendbuf, MemType::CPU);
+  free_memory_coll(recvbuf, MemType::CPU);
+
+
     printf("done with bcast rank %d\n", rank);
     destroy_ucc_comm(global_comm);
     ucc_finalize(lib);
