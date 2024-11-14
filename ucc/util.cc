@@ -79,7 +79,7 @@ static int Coll_Allgather_thread(void *sendbuf, int sendcount, MPI_Datatype send
   return 0;
 }
 
-static ucc_status_t allgather(void *sbuf, void *rbuf, size_t msglen,
+static ucc_status_t bootstrap_allgather(void *sbuf, void *rbuf, size_t msglen,
                               void *coll_info, void **req)
 {
   MPI_Comm    comm = ((UCCComm *)coll_info)->comm;
@@ -90,7 +90,7 @@ static ucc_status_t allgather(void *sbuf, void *rbuf, size_t msglen,
   return UCC_OK;
 }
 
-static ucc_status_t allgather_thread(void *sbuf, void *rbuf, size_t msglen,
+static ucc_status_t bootstrap_allgather_thread(void *sbuf, void *rbuf, size_t msglen,
                                      void *coll_info, void **req)
 {
   UCCComm    *comm = (UCCComm *)coll_info;
@@ -101,12 +101,12 @@ static ucc_status_t allgather_thread(void *sbuf, void *rbuf, size_t msglen,
   return UCC_OK;
 }
 
-static ucc_status_t request_test(void *req)
+static ucc_status_t bootstrap_request_test(void *req)
 {
   return UCC_OK;
 }
 
-static ucc_status_t request_free(void *req)
+static ucc_status_t bootstrap_request_free(void *req)
 {
   return UCC_OK;
 }
@@ -128,9 +128,9 @@ void create_ucc_cxt(UCCComm &comm, ucc_lib_h lib, ucc_context_h &ctx)
   ucc_context_params_t ctx_params = { 0 };
   ctx_params.mask = UCC_CONTEXT_PARAM_FIELD_TYPE | UCC_CONTEXT_PARAM_FIELD_OOB;
   ctx_params.type = UCC_CONTEXT_SHARED;
-  ctx_params.oob.allgather = allgather_thread;
-  ctx_params.oob.req_test = request_test;
-  ctx_params.oob.req_free = request_free;
+  ctx_params.oob.allgather = bootstrap_allgather_thread;
+  ctx_params.oob.req_test = bootstrap_request_test;
+  ctx_params.oob.req_free = bootstrap_request_free;
   ctx_params.oob.coll_info = (void*)(&comm);
   ctx_params.oob.n_oob_eps = comm.global_comm_size;
   ctx_params.oob.oob_ep = comm.global_rank;
@@ -153,9 +153,9 @@ void create_ucc_team(UCCComm &comm, ucc_context_h ctx, ucc_team_h &team)
     team_params.id = 0;
 #else
     team_params.mask          = UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_OOB;
-    team_params.oob.allgather = allgather_thread;
-    team_params.oob.req_test  = request_test;
-    team_params.oob.req_free  = request_free;
+    team_params.oob.allgather = bootstrap_allgather_thread;
+    team_params.oob.req_test  = bootstrap_request_test;
+    team_params.oob.req_free  = bootstrap_request_free;
     team_params.oob.coll_info = (void*)(&comm);
     team_params.oob.n_oob_eps = comm.global_comm_size;
     team_params.oob.oob_ep    = comm.global_rank;
@@ -204,4 +204,87 @@ int destroy_ucc_comm(UCCComm &comm)
   while (ucc_team_destroy(comm.team) == UCC_INPROGRESS) {};
   ucc_context_destroy(comm.ctx);
   return 0;
+}
+
+void ucc_allreduce(void *sendbuf, ucc_memory_type_t send_memtype, void *recvbuf, ucc_memory_type_t recv_memtype, size_t count, ucc_datatype_t type, ucc_reduction_op_t op, UCCComm &comm)
+{
+    ucc_coll_req_h req;
+
+    ucc_coll_args_t coll = { 0 };
+    coll.mask = UCC_COLL_ARGS_FIELD_FLAGS;
+    coll.flags = UCC_COLL_ARGS_FLAG_COUNT_64BIT;
+    coll.coll_type = UCC_COLL_TYPE_ALLREDUCE;
+    coll.op = op;
+
+    coll.src.info.buffer = sendbuf;
+    coll.src.info.count = count;
+    coll.src.info.datatype = type;
+    coll.src.info.mem_type = send_memtype;
+
+    coll.dst.info.buffer = recvbuf;
+    coll.dst.info.count = count;
+    coll.dst.info.datatype = type;
+    coll.dst.info.mem_type = recv_memtype;
+
+    UCC_CHECK(ucc_collective_init(&coll, &req, comm.team));
+    UCC_CHECK(ucc_collective_post(req));
+
+    while (ucc_collective_test(req) > UCC_OK) {
+        UCC_CHECK(ucc_context_progress(comm.ctx));
+    }
+
+    UCC_CHECK(ucc_collective_finalize(req));
+}
+
+ucc_datatype_t get_ucc_datatype(enum DataType datatype)
+{
+  switch (datatype) {
+  case DataType::FLOAT:
+    return UCC_DT_FLOAT32;
+  case DataType::DOUBLE:
+    return UCC_DT_FLOAT64;
+  case DataType::INT:
+    return UCC_DT_INT32;
+  default:
+    return UCC_DT_PREDEFINED_LAST;
+  }
+}
+
+ucc_reduction_op_t get_ucc_op(enum Redop op)
+{
+  switch (op) {
+    case Redop::SUM:
+      return UCC_OP_SUM;
+    default:
+      return UCC_OP_LAST;
+  }
+}
+
+size_t get_ucc_datatype_size(enum DataType datatype)
+{
+  switch (datatype) {
+  case DataType::FLOAT:
+    return sizeof(float);
+  case DataType::DOUBLE:
+    return sizeof(double);
+  case DataType::INT:
+    return sizeof(int);
+  default:
+    return 0;
+  }
+}
+
+ucc_memory_type_t get_ucc_memtype(enum MemType memtype)
+{
+  switch (memtype) {
+    case MemType::CPU:
+      return UCC_MEMORY_TYPE_HOST;
+    case MemType::CUDA:
+      return UCC_MEMORY_TYPE_CUDA;
+    case MANAGED:
+      return UCC_MEMORY_TYPE_CUDA_MANAGED;
+    default:
+      assert(0);
+      return UCC_MEMORY_TYPE_UNKNOWN;
+  }
 }

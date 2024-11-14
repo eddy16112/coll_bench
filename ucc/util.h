@@ -39,3 +39,13 @@ void create_ucc_team(UCCComm &comm, std::vector<int> &rank_mapping, ucc_context_
 int create_ucc_comm(UCCComm &comm, int tid, int num_threads, const ucc_lib_h lib);
 
 int destroy_ucc_comm(UCCComm &comm);
+
+void ucc_allreduce(void *sendbuf, ucc_memory_type_t send_memtype, void *recvbuf, ucc_memory_type_t recv_memtype, size_t count, ucc_datatype_t type, ucc_reduction_op_t op, UCCComm &comm);
+
+ucc_datatype_t get_ucc_datatype(enum DataType datatype);
+
+ucc_reduction_op_t get_ucc_op(enum Redop op);
+
+size_t get_ucc_datatype_size(enum DataType datatype);
+
+ucc_memory_type_t get_ucc_memtype(enum MemType memtype);

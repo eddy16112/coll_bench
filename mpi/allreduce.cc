@@ -2,9 +2,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void run_allreduce(const AllreduceConfig &config, MPI_Comm comm)
+void run_allreduce(const AllreduceConfig &config)
 {
   int rank, comm_size;
+  MPI_Comm comm = MPI_COMM_WORLD;
   MPI_CHECK(MPI_Comm_rank(comm, &rank));
   MPI_CHECK(MPI_Comm_size(comm, &comm_size));
 
@@ -67,12 +68,11 @@ int main(int argc, char **argv)
   int provided = 0;
   MPI_CHECK(MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided));
 
-  MPI_Comm comm = MPI_COMM_WORLD;
   printf("pid %d\n", getpid());
   //sleep(10);
 
-  AllreduceConfig config{1000, 10, 262144, false, DataType::INT, MemType::CPU, Redop::SUM};
-  run_allreduce(config, comm);
+  AllreduceConfig config{1000, 10, 262144, true, DataType::INT, MemType::CPU, Redop::SUM};
+  run_allreduce(config);
 
   MPI_CHECK(MPI_Finalize());
   return 0;
