@@ -19,11 +19,11 @@ void run_allreduce(const AllreduceConfig &config)
   void *recvbuf = nullptr;
   size_t bufsize = config.count * mpi_type_size; 
 
-  if (allocate_memory_coll((void **)&sendbuf, bufsize, MemType::CPU)) {
+  if (allocate_memory_coll((void **)&sendbuf, bufsize, config.memtype)) {
     fprintf(stderr, "Could Not Allocate sendbuf [rank %d]\n", rank);
     MPI_CHECK(MPI_Abort(comm, EXIT_FAILURE));
   }
-  if (allocate_memory_coll((void **)&recvbuf, bufsize, MemType::CPU)) {
+  if (allocate_memory_coll((void **)&recvbuf, bufsize, config.memtype)) {
     fprintf(stderr, "Could Not Allocate recvbuf [rank %d]\n", rank);
     MPI_CHECK(MPI_Abort(comm, EXIT_FAILURE));
   }
@@ -59,8 +59,8 @@ void run_allreduce(const AllreduceConfig &config)
     printf("allreduce size %lu, avg %f, min %f, max %f\n", bufsize, avg_time, min_time, max_time);
   }
 
-  free_memory_coll(sendbuf, MemType::CPU);
-  free_memory_coll(recvbuf, MemType::CPU);
+  free_memory_coll(sendbuf, config.memtype);
+  free_memory_coll(recvbuf, config.memtype);
 }
 
 int main(int argc, char **argv)

@@ -22,16 +22,16 @@ void run_allreduce(const AllreduceConfig &config, int num_threads, int tid, ucc_
   void *recvbuf = nullptr;
   size_t bufsize = config.count * datatype_size; 
 
-  if (allocate_memory_coll((void **)&sendbuf, bufsize, MemType::CPU)) {
+  if (allocate_memory_coll((void **)&sendbuf, bufsize, config.memtype)) {
     fprintf(stderr, "Could Not Allocate sendbuf [rank %d]\n", rank);
     exit(1);
   }
-  if (allocate_memory_coll((void **)&recvbuf, bufsize, MemType::CPU)) {
+  if (allocate_memory_coll((void **)&recvbuf, bufsize, config.memtype)) {
     fprintf(stderr, "Could Not Allocate recvbuf [rank %d]\n", rank);
     exit(1);
   }
 
-  ucc_memory_type_t memtype = get_ucc_memtype(MemType::CPU);
+  ucc_memory_type_t memtype = get_ucc_memtype(config.memtype);
 
   ucc_barrier(comm);
 
@@ -62,8 +62,8 @@ void run_allreduce(const AllreduceConfig &config, int num_threads, int tid, ucc_
     printf("allreduce size %lu, avg %f, min %f, max %f\n", bufsize, avg_time, min_time, max_time);
   }
 
-  free_memory_coll(sendbuf, MemType::CPU);
-  free_memory_coll(recvbuf, MemType::CPU);
+  free_memory_coll(sendbuf, config.memtype);
+  free_memory_coll(recvbuf, config.memtype);
   destroy_ucc_comm(comm);
 }
 
