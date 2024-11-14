@@ -12,7 +12,7 @@ static int Coll_Gather_thread(void *sendbuf, int sendcount, MPI_Datatype sendtyp
   int total_size = global_comm.mpi_comm_size * global_comm.nb_threads;
   MPI_Status status;
  
-  int global_rank = global_comm.global_rank;
+  int global_rank = global_comm.rank;
   assert(global_rank / global_comm.nb_threads == global_comm.mpi_rank);
   assert(global_rank == global_comm.mpi_rank * global_comm.nb_threads + global_comm.tid);
 
@@ -61,7 +61,7 @@ static int Coll_Allgather_thread(void *sendbuf, int sendcount, MPI_Datatype send
 {	
   int total_size = global_comm.mpi_comm_size * global_comm.nb_threads;
 
-  printf("allgather thread\n");
+  //printf("allgather thread\n");
 
   // MPI_IN_PLACE
   if (sendbuf == recvbuf) {
@@ -132,8 +132,8 @@ void create_ucc_cxt(UCCComm &comm, ucc_lib_h lib, ucc_context_h &ctx)
   ctx_params.oob.req_test = bootstrap_request_test;
   ctx_params.oob.req_free = bootstrap_request_free;
   ctx_params.oob.coll_info = (void*)(&comm);
-  ctx_params.oob.n_oob_eps = comm.global_comm_size;
-  ctx_params.oob.oob_ep = comm.global_rank;
+  ctx_params.oob.n_oob_eps = comm.comm_size;
+  ctx_params.oob.oob_ep = comm.rank;
   UCC_CHECK(ucc_context_config_read(lib, NULL, &ctx_config));
   UCC_CHECK(ucc_context_create(lib, &ctx_params, ctx_config, &ctx));
   ucc_context_config_release(ctx_config);
@@ -146,10 +146,10 @@ void create_ucc_team(UCCComm &comm, ucc_context_h ctx, ucc_team_h &team)
     team_params.mask =
         UCC_TEAM_PARAM_FIELD_EP_MAP | UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_ID;
     team_params.ep_map.type = UCC_EP_MAP_ARRAY;
-    team_params.ep_map.ep_num = comm.global_comm_size;;
+    team_params.ep_map.ep_num = comm.comm_size;;
     team_params.ep_map.array.map = comm.top_rank_mapping.data();
     team_params.ep_map.array.elem_size = sizeof(comm.top_rank_mapping[0]);
-    team_params.ep = comm.global_rank;
+    team_params.ep = comm.rank;
     team_params.id = 0;
 #else
     team_params.mask          = UCC_TEAM_PARAM_FIELD_EP | UCC_TEAM_PARAM_FIELD_EP_RANGE | UCC_TEAM_PARAM_FIELD_OOB;
@@ -157,9 +157,9 @@ void create_ucc_team(UCCComm &comm, ucc_context_h ctx, ucc_team_h &team)
     team_params.oob.req_test  = bootstrap_request_test;
     team_params.oob.req_free  = bootstrap_request_free;
     team_params.oob.coll_info = (void*)(&comm);
-    team_params.oob.n_oob_eps = comm.global_comm_size;
-    team_params.oob.oob_ep    = comm.global_rank;
-    team_params.ep            = comm.global_rank;
+    team_params.oob.n_oob_eps = comm.comm_size;
+    team_params.oob.oob_ep    = comm.rank;
+    team_params.ep            = comm.rank;
 #endif
     team_params.ep_range      = UCC_COLLECTIVE_EP_RANGE_CONTIG;
     UCC_CHECK(ucc_team_create_post(&ctx, 1, &team_params, &team));
@@ -181,9 +181,9 @@ int create_ucc_comm(UCCComm &comm, int tid, int num_threads, const ucc_lib_h lib
   comm.mpi_rank = mpi_rank;
   comm.nb_threads = num_threads;
   comm.tid = tid;
-  comm.global_rank = rank;
+  comm.rank = rank;
   comm.comm = MPI_COMM_WORLD;
-  comm.global_comm_size = size;
+  comm.comm_size = size;
 
   ucc_context_h ctx;
   ucc_team_h team;
@@ -225,6 +225,56 @@ void ucc_allreduce(void *sendbuf, ucc_memory_type_t send_memtype, void *recvbuf,
     coll.dst.info.count = count;
     coll.dst.info.datatype = type;
     coll.dst.info.mem_type = recv_memtype;
+
+    UCC_CHECK(ucc_collective_init(&coll, &req, comm.team));
+    UCC_CHECK(ucc_collective_post(req));
+
+    while (ucc_collective_test(req) > UCC_OK) {
+        UCC_CHECK(ucc_context_progress(comm.ctx));
+    }
+
+    UCC_CHECK(ucc_collective_finalize(req));
+}
+
+void ucc_reduce(void *sendbuf, ucc_memory_type_t send_memtype, void *recvbuf, ucc_memory_type_t recv_memtype, size_t count, ucc_datatype_t type, ucc_reduction_op_t op, int root, UCCComm &comm)
+{
+    ucc_coll_req_h req;
+
+    ucc_coll_args_t coll = { 0 };
+    coll.mask = UCC_COLL_ARGS_FIELD_FLAGS;
+    coll.flags = UCC_COLL_ARGS_FLAG_COUNT_64BIT;
+    coll.coll_type = UCC_COLL_TYPE_REDUCE;
+    coll.op = op;
+    coll.root = root;
+
+    coll.src.info.buffer = sendbuf;
+    coll.src.info.count = count;
+    coll.src.info.datatype = type;
+    coll.src.info.mem_type = send_memtype;
+
+    coll.dst.info.buffer = recvbuf;
+    coll.dst.info.count = count;
+    coll.dst.info.datatype = type;
+    coll.dst.info.mem_type = recv_memtype;
+
+    UCC_CHECK(ucc_collective_init(&coll, &req, comm.team));
+    UCC_CHECK(ucc_collective_post(req));
+
+    while (ucc_collective_test(req) > UCC_OK) {
+        UCC_CHECK(ucc_context_progress(comm.ctx));
+    }
+
+    UCC_CHECK(ucc_collective_finalize(req));
+}
+
+void ucc_barrier(UCCComm &comm)
+{
+    ucc_coll_req_h req;
+
+    ucc_coll_args_t coll = { 0 };
+    coll.mask = UCC_COLL_ARGS_FIELD_FLAGS;
+    coll.flags = UCC_COLL_ARGS_FLAG_COUNT_64BIT;
+    coll.coll_type = UCC_COLL_TYPE_BARRIER;
 
     UCC_CHECK(ucc_collective_init(&coll, &req, comm.team));
     UCC_CHECK(ucc_collective_post(req));
